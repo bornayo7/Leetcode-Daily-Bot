@@ -6,7 +6,7 @@ module.exports = {
 		.setDescription('Poke the bot!'),
 	async execute(interaction, client) {
 		const button = new ButtonBuilder()
-		.setCustomId('poke ID')
+		.setCustomId('poke')
 		.setStyle(ButtonStyle.Primary)
 		.setLabel('Poke me!');
 

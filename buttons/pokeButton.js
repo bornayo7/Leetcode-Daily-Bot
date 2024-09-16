@@ -1,5 +1,5 @@
 module.exports = {
-	customID: 'poke ID',
+	customID: 'poke',
 	async execute(interaction, client) {
 		await interaction.reply({
 			content: 'Ouch that hurts! :c',
