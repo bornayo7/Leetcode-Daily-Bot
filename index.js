@@ -1,6 +1,6 @@
 // Import the discord.js module
-// const { Client, PermissionsBitField } = require('discord.js'); // Old import statement
 const { Client, GatewayIntentBits, } = require('discord.js');
+// const { Client, PermissionsBitField } = require('discord.js'); // Old import statement from original file
 
 // Create a new client instance
 const client = new Client({
@@ -153,11 +153,14 @@ client.on('interactionCreate', async interaction => {
         // We use a "collector" to listen to button clicks
         // Not really sure what a collector is, or why it is used here
         const collector = message.createMessageComponentCollector({
+
             // This filter means that we only listen to clicks
             // from buttons with the 'clicker_button' id
             filter: i => i.customId === 'clicker_button',
+
             // Collector will stop after 60 seconds
             time: 60000
+
         });
 
         // Event Listener for our clicker collector
@@ -179,6 +182,7 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply('Ouch that hurts!');
     }
 })
+
 // Blah blah blah
 
 /*
@@ -208,67 +212,67 @@ client.on('messageCreate', () => {} )
 
 */
 
-async function InteractionHandler(interaction, type) {
+// async function InteractionHandler(interaction, type) {
 
-    const component = client[type].get( interaction.customId ?? interaction.commandName );
-    if (!component) {
-        // console.error(`${type} not found: ${interaction.customId ?? interaction.commandName}`);
-        return;
-    }
+//     const component = client[type].get( interaction.customId ?? interaction.commandName );
+//     if (!component) {
+//         // console.error(`${type} not found: ${interaction.customId ?? interaction.commandName}`);
+//         return;
+//     }
 
-    try {
-        //command properties
-        if (component.admin) {
-            if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) return await interaction.reply({ content: `⚠️ Only administrators can use this command!`, ephemeral: true });
-        }
+//     try {
+//         //command properties
+//         if (component.admin) {
+//             if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) return await interaction.reply({ content: `⚠️ Only administrators can use this command!`, ephemeral: true });
+//         }
 
-        if (component.owner) {
-            if (interaction.user.id !== 'YOURUSERID') return await interaction.reply({ content: `⚠️ Only bot owners can use this command!`, ephemeral: true });
-        }
+//         if (component.owner) {
+//             if (interaction.user.id !== 'YOURUSERID') return await interaction.reply({ content: `⚠️ Only bot owners can use this command!`, ephemeral: true });
+//         }
 
-        //the mod command property requires additional setup, watch the video here to set it up: https://youtu.be/2Tqy6Cp_10I?si=bharHI_Vw7qjaG2Q
+//         //the mod command property requires additional setup, watch the video here to set it up: https://youtu.be/2Tqy6Cp_10I?si=bharHI_Vw7qjaG2Q
 
-        /*
-            COMMAND PROPERTIES:
+//         /*
+//             COMMAND PROPERTIES:
 
-            module.exports = {
-                admin: true,
-                data: new SlashCommandBuilder()
-                .setName('test')
-                .setDescription('test'),
-                async execute(interaction) { 
+//             module.exports = {
+//                 admin: true,
+//                 data: new SlashCommandBuilder()
+//                 .setName('test')
+//                 .setDescription('test'),
+//                 async execute(interaction) { 
                 
-                }
-            }
+//                 }
+//             }
 
-            You can use command properties in the module.exports statement by adding a valid property to : true,
+//             You can use command properties in the module.exports statement by adding a valid property to : true,
 
-            VALID PROPERTIES:
+//             VALID PROPERTIES:
 
-            admin : true/false
-            owner : true/false
-			dev: true/false
+//             admin : true/false
+//             owner : true/false
+// 			dev: true/false
 
-            You can add more command properties by following the prompt below and pasting it above in location with all the other statements:
+//             You can add more command properties by following the prompt below and pasting it above in location with all the other statements:
             
-            if (component.propertyname) {
-                if (logic statement logic) return await interaction.reply({ content: `⚠️ response to flag`, ephemeral: true });
-            }
-        */
+//             if (component.propertyname) {
+//                 if (logic statement logic) return await interaction.reply({ content: `⚠️ response to flag`, ephemeral: true });
+//             }
+//         */
 
-        await component.execute(interaction, client);
-    } catch (error) {
-        console.error(error);
-		// If there is already a response, say after a deferReply(), we override the response with an error message.
-        await interaction.deferReply({ ephemeral: true }).catch( () => {} );
-        await interaction.editReply({
-            content: `There was an error while executing this command!\n\`\`\`${error}\`\`\``,
-            embeds: [],
-            components: [],
-            files: []
-        }).catch( () => {} );
-    }
-}
+//         await component.execute(interaction, client);
+//     } catch (error) {
+//         console.error(error);
+// 		// If there is already a response, say after a deferReply(), we override the response with an error message.
+//         await interaction.deferReply({ ephemeral: true }).catch( () => {} );
+//         await interaction.editReply({
+//             content: `There was an error while executing this command!\n\`\`\`${error}\`\`\``,
+//             embeds: [],
+//             components: [],
+//             files: []
+//         }).catch( () => {} );
+//     }
+// }
 
 /*
 
