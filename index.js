@@ -5,9 +5,11 @@ const { Client, GatewayIntentBits, } = require('discord.js');
 // Create a new client instance
 const client = new Client({
     intents: [
-        GatewayIntentBits.Guilds,        // Gives access to server operations (such as bot joins/leaves, guild updates, etc.).
-        GatewayIntentBits.GuildMessages, // Allows access to receive events related to messages sent in text channels in (servers).
-        GatewayIntentBits.MessageContent // Allows the bot to access the content of messages in servers.
+        GatewayIntentBits.Guilds,         // Gives access to server operations (such as bot joins/leaves, guild updates, etc.).
+        GatewayIntentBits.GuildMessages,  // Allows access to receive events related to messages sent in text channels in (servers).
+        GatewayIntentBits.MessageContent, // Allows the bot to access the content of messages in servers.
+        GatewayIntentBits.GuildMessageReactions, // 
+        GatewayIntentBits.GuildMembers,
     ]
 });
 
@@ -19,16 +21,14 @@ client.cache = new Map();
 // Login to Discord with your app's token
 console.log(`Logging in...`);
 client.login(client.config.TOKEN);
-client.on('ready', function () {
-    console.log(`Logged in as ${client.user.tag}!`);
-
-    // Not sure what this line does: commented out for now
-	// require('./utils/CheckIntents.js')(client);
-});
 
 // When the client is ready, run this code (only once)
 client.once('ready', () => {
     console.log('Bot is online!');
+    console.log(`Logged in as ${client.user.tag}!`);
+
+    // Not sure what this line does: commented out for now
+	// require('./utils/CheckIntents.js')(client);
 });
 
 // Listen for messages and respond
@@ -179,7 +179,29 @@ client.on('interactionCreate', async interaction => {
 		});
     }
     if (commandName == 'sendreactionroles') {
-        const roleMessage = await interaction.channel.send('Test Message!');
+
+        const guild = interaction.guild
+        // If the reaction role doesn't exist, create it
+        let dailyPuzzleRole = guild.roles.cache.find(r => r.name === 'Daily Puzzle');
+        if (!dailyPuzzleRole) {
+            try {
+                dailyPuzzleRole = await guild.roles.create({
+                    name: 'Daily Puzzle',
+                    color: 0,  // You can set a specific color if you like
+                    reason: 'Role created for reaction role: "Daily Puzzle"'
+                });
+                console.log(`Created new role: ${dailyPuzzleRole.name}`);
+            } catch (error) {
+                console.error(`Error creating role: ${error}`);
+                return;
+            }
+        }
+
+        // Send roles message
+        const roleMessage = await interaction.channel.send('React to receive the "Daily Puzzle" role!');
+
+        // React with the emojis
+        await roleMessage.react('🧩');
 
         await interaction.reply({
             content: 'Reaction roles sent!',
@@ -189,6 +211,7 @@ client.on('interactionCreate', async interaction => {
 
 });
 
+// Button Interactions
 client.on('interactionCreate', async interaction => {
     // Button Handler
     if (!interaction.isButton()) return;
@@ -197,6 +220,51 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply('Ouch that hurts!');
     }
 })
+
+// Reaction Roles
+const roleMap = {
+    '🧩': 'Daily Puzzle',  // Replace with actual role names
+};
+
+// Reaction event handler
+client.on('messageReactionAdd', async (reaction, user) => {
+    // Check if the reaction is in a guild (not in DMs) and it's not from a bot
+    if (reaction.message.partial) await reaction.message.fetch();
+    if (reaction.partial) await reaction.fetch();
+    if (user.bot) return;
+
+    const guild = reaction.message.guild;
+    const member = guild.members.cache.get(user.id);
+    const roleName = roleMap[reaction.emoji.name];
+
+    if (roleName) {
+        const role = guild.roles.cache.find(r => r.name === roleName);
+        if (role) {
+            await member.roles.add(role);
+            console.log(`Assigned ${role.name} to ${user.tag}`);
+        }
+    }
+});
+
+// Handle reaction removal (removing the role)
+client.on('messageReactionRemove', async (reaction, user) => {
+    // Check if the reaction is in a guild (not in DMs) and it's not from a bot
+    if (reaction.message.partial) await reaction.message.fetch();
+    if (reaction.partial) await reaction.fetch();
+    if (user.bot) return;
+
+    const guild = reaction.message.guild;
+    const member = guild.members.cache.get(user.id);
+    const roleName = roleMap[reaction.emoji.name];
+
+    if (roleName) {
+        const role = guild.roles.cache.find(r => r.name === roleName);
+        if (role) {
+            await member.roles.remove(role);
+            console.log(`Removed ${role.name} from ${user.tag}`);
+        }
+    }
+});
 
 // Blah blah blah
 
