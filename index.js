@@ -56,16 +56,20 @@ const { ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
 // Define the slash commands
 const commands = [
     {
-        name: 'poke',
-        description: 'Poke the bot! (Send a message with a button)'
-    },
-    {
         name: 'ping',
         description: 'Replies with Pong!'
     },
     {
+        name: 'poke',
+        description: 'Poke the bot! (Send a message with a button)'
+    },
+    {
         name: 'clicker',
         description: 'Starts a clicker button thing'
+    },
+    {
+        name: 'sendreactionroles',
+        description: 'Sends a message containg reaction roles.'
     }
 ];
 
@@ -84,13 +88,13 @@ client.once('ready', async () => {
         console.log('Started refreshing application (/) commands.');
 
         // Register commands globally (for all servers)
-        await rest.put(
-            Routes.applicationCommands(client.user.id),
-            { body: commands }
-        );
+        // await rest.put(
+        //     Routes.applicationCommands(client.user.id),
+        //     { body: commands }
+        // );
 
         // Ignore for now ..
-        await rest.put(
+        await rest.put( // LeetCode Daily
             Routes.applicationGuildCommands(client.user.id, '1281840845800345611'),
             { body: commands }
         );
@@ -113,6 +117,9 @@ client.on('interactionCreate', async interaction => {
     if (!interaction.isCommand()) return;
 
     const { commandName } = interaction;
+
+    // It's bad practice to leave all these commands in a single file like this
+    // Consider moving them to a folder
 
     if (commandName === 'ping') {
         await interaction.reply('Pong!');
@@ -170,6 +177,14 @@ client.on('interactionCreate', async interaction => {
 				content: `You clicked the button ${clickCount} times!`
 			});
 		});
+    }
+    if (commandName == 'sendreactionroles') {
+        const roleMessage = await interaction.channel.send('Test Message!');
+
+        await interaction.reply({
+            content: 'Reaction roles sent!',
+            ephemeral: true
+        });
     }
 
 });
