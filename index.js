@@ -33,7 +33,6 @@ client.once('ready', () => {
 
 // Listen for messages and respond
 client.on('messageCreate', (message) => {
-    console.log('messageCreate Event: ', message)
     // Here, if you send "!ping", the bot will respond with "Pong!"
     if (message.content === '!ping') {
         message.channel.send('Pong!');
@@ -52,6 +51,10 @@ const { Routes } = require('discord-api-types/v10');
 
 // Tools needed to create buttons with discord API
 const { ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
+
+// To work with web APIs
+const axios = require('axios');
 
 // Define the slash commands
 const commands = [
@@ -70,7 +73,19 @@ const commands = [
     {
         name: 'sendreactionroles',
         description: 'Sends a message containg reaction roles.'
-    }
+    },
+    {
+        name: 'senddailymanual',
+        description: 'Manually send the daily leetcode challenge with a provided link.',
+        options: [
+            {
+                name: 'link',  // Name of the option
+                type: 3,                // STRING type
+                description: 'Link of the daily Leetcode to send.',
+                required: true          // This makes the input mandatory
+            }
+        ]
+    },
 ];
 
 // Register the slash commands (I don't know what this does)
@@ -116,7 +131,7 @@ client.on('interactionCreate', async interaction => {
     // Command handler
     if (!interaction.isCommand()) return;
 
-    const { commandName } = interaction;
+    const { commandName, options } = interaction;
 
     // It's bad practice to leave all these commands in a single file like this
     // Consider moving them to a folder
@@ -208,7 +223,80 @@ client.on('interactionCreate', async interaction => {
             ephemeral: true
         });
     }
+    if (commandName == 'senddailymanual') {
 
+        try {
+            // Get the input provided by the user
+            const link = options.getString('link');
+            
+            // Regex to get the title slug from the link to use in API
+            // ex. https://leetcode.com/problems/two-sum ---> 'two-sum'
+            const titleSlug = (link.match(/(?<=leetcode.com\/problems\/)[\w-]*/) || [])[0]
+            if (!titleSlug) throw new Error('Invalid link!')
+            
+            
+            let problemTitle, problemDifficulty
+            // I will deal with this later
+            /*
+
+            axios.get(`https://alfa-leetcode-api.onrender.com/select?titleSlug=${titleSlug}`)
+            .then(response => {
+                
+                console.log(response.data);
+
+                console.log(response.data.questionId)
+
+                // If invalid title slug was given
+                if (!response.data?.questionId)
+                    throw new Error('Error finding problem!')
+
+                console.log("DID THIS RUN?")
+                problemTitle = response.data.questionTitle
+                problemDifficulty = response.data.difficulty
+
+            })
+            .catch(error => {
+                console.error('Error fetching data:', error)
+                throw error
+            });
+            console.log("DID THIS RUN?")
+
+            */
+            
+            const sanitizedLink = 'https://leetcode.com/problems/' + titleSlug
+            // Create an embed
+            const embed = new EmbedBuilder()
+                .setColor(0xffa115)  // Set the color of the embed
+                .setTitle('Daily Leetcode')
+                // .setDescription(`[${sanitizedLink}](${sanitizedLink})`)
+                .setDescription(`[${titleSlug}](${sanitizedLink})`)
+                // .setThumbnail(client.user.displayAvatarURL())  // Thumbnail (bot avatar)
+                // .addFields(
+                //     { name: 'Difficulty', value: problemDifficulty, inline: true },
+                // )
+                .setFooter({ text: 'React to confirm submission.', iconURL: client.user.displayAvatarURL() })  // Footer
+                .setTimestamp();  // Add a timestamp to the embed
+
+            // Send the embed to the channel where the command was issued
+            const dailyMessage = await interaction.channel.send({ embeds: [embed] });
+            
+            // React with the emoji
+            await dailyMessage.react('✅');
+    
+            // Reply with the provided message
+            await interaction.reply({
+                content: 'Daily Leetcode sent!',
+                ephemeral: true
+            });
+        } catch (error) {
+            console.error(error);
+            // Send error message to the user
+            await interaction.reply({ 
+                content: `Unable to send message: ${error.message}`, 
+                ephemeral: true // Makes the message visible only to the user
+            });
+        }
+    }
 });
 
 // Button Interactions
@@ -243,6 +331,11 @@ client.on('messageReactionAdd', async (reaction, user) => {
             await member.roles.add(role);
             console.log(`Assigned ${role.name} to ${user.tag}`);
         }
+    }
+
+    // Spaghetti way to do this, fix later
+    if (reaction.emoji.name == '✅') {
+        reaction.message.channel.send(`Daily puzzle confirmed <@${user.id}>`)
     }
 });
 
