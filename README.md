@@ -37,6 +37,7 @@ cp config.example.json config.json
   "dailyReminderHour": 9,
   "dailyReminderMinute": 0,
   "timezone": "America/Chicago",
+  "dailyPuzzleRoleId": "",
   "dailyPuzzleRoleName": "Daily Puzzle",
   "reminderGuildIds": [
     "YOUR_DISCORD_SERVER_ID"
@@ -76,6 +77,7 @@ The bot uses reaction events, member role lookup, and slash commands, so these i
 | `dailyReminderHour` | Reminder hour in 24-hour time. |
 | `dailyReminderMinute` | Reminder minute. |
 | `timezone` | Timezone for reminders and date tracking. Default is `America/Chicago`. |
+| `dailyPuzzleRoleId` | Optional role ID for the Daily Puzzle role. Admin settings fill this automatically. |
 | `dailyPuzzleRoleName` | Role to mention for daily reminders. Default is `Daily Puzzle`. |
 | `reminderGuildIds` | Server IDs where automatic reminders should run. |
 | `commandGuildIds` | Server IDs where slash commands should be registered. If omitted, the bot keeps the original two guild IDs from the starter code. |
@@ -149,7 +151,7 @@ These require Administrator permission.
 | --- | --- |
 | `/setdailychannel channel:#channel` | Sets the reminder channel for the server. |
 | `/setremindertime hour:number minute:number` | Sets the reminder time for the server. |
-| `/setdailyrole role:@role` | Sets the Daily Puzzle role by role name. |
+| `/setdailyrole role:@role` | Sets the Daily Puzzle role for mentions, reaction roles, and missed-user checks. |
 | `/togglereminders enabled:true|false` | Enables or disables automatic reminders for the server. |
 
 ## How daily reminders work
@@ -205,6 +207,12 @@ npm install
 npm run check
 ```
 
+This is the same syntax check directly:
+
+```bash
+node --check index.js
+```
+
 3. Fill in `config.json`.
 
 4. Start the bot.
@@ -246,4 +254,5 @@ The repo includes `data/.gitkeep` so the `data` folder exists, but the real save
 - `/randomproblem` uses a curated fallback list instead of a true random Leetcode API.
 - The Leetcode daily GraphQL endpoint can change or rate limit requests. The fallback problemset link keeps reminders working.
 - Thread creation can fail if the bot lacks permissions or the channel does not support threads.
+- Missed-user lists need the Server Members Intent to be complete. If member fetching fails, the bot warns that the list may be incomplete.
 - Slash command changes can take time to appear if commands are registered globally. This bot registers guild commands by default for faster updates.

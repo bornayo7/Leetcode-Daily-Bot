@@ -4,6 +4,7 @@
   "dailyReminderHour": 9,
   "dailyReminderMinute": 0,
   "timezone": "America/Chicago",
+  "dailyPuzzleRoleId": "",
   "dailyPuzzleRoleName": "Daily Puzzle",
   "reminderGuildIds": [
     "YOUR_DISCORD_SERVER_ID"

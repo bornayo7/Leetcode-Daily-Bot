@@ -70,7 +70,11 @@ let config = {};
 try {
     config = require('./config.json');
 } catch (error) {
-    console.error('Missing config.json. Copy config.example.json to config.json and fill in your bot token.');
+    if (error.code === 'MODULE_NOT_FOUND') {
+        console.error('Missing config.json. Copy config.example.json to config.json and fill in your bot token.');
+    } else {
+        console.error(`Could not read config.json: ${error.message}`);
+    }
     config = {};
 }
 
@@ -313,6 +317,22 @@ function normalizeArray(value) {
     return [String(value)];
 }
 
+function getIntegerSetting(value, fallback, min, max) {
+    const number = Number(value);
+    if (!Number.isInteger(number)) return fallback;
+    if (number < min || number > max) return fallback;
+    return number;
+}
+
+function getBooleanSetting(value, fallback = false) {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+        if (value.toLowerCase() === 'true') return true;
+        if (value.toLowerCase() === 'false') return false;
+    }
+    return fallback;
+}
+
 function getTodayDateKey(timezone = DEFAULT_TIMEZONE) {
     return getDateKeyFromDate(new Date(), timezone);
 }
@@ -442,18 +462,29 @@ function ensureGuildData(data, guildId) {
 function getGuildSettings(guildData, baseConfig = client.config) {
     const defaults = {
         reminderChannelId: baseConfig.reminderChannelId || '',
-        dailyReminderHour: Number.isInteger(baseConfig.dailyReminderHour) ? baseConfig.dailyReminderHour : 9,
-        dailyReminderMinute: Number.isInteger(baseConfig.dailyReminderMinute) ? baseConfig.dailyReminderMinute : 0,
+        dailyReminderHour: getIntegerSetting(baseConfig.dailyReminderHour, 9, 0, 23),
+        dailyReminderMinute: getIntegerSetting(baseConfig.dailyReminderMinute, 0, 0, 59),
         timezone: baseConfig.timezone || DEFAULT_TIMEZONE,
+        dailyPuzzleRoleId: baseConfig.dailyPuzzleRoleId || '',
         dailyPuzzleRoleName: baseConfig.dailyPuzzleRoleName || DEFAULT_DAILY_ROLE_NAME,
-        enableDailyReminders: baseConfig.enableDailyReminders === undefined ? false : Boolean(baseConfig.enableDailyReminders),
+        enableDailyReminders: getBooleanSetting(baseConfig.enableDailyReminders, false),
         reminderGuildIds: normalizeArray(baseConfig.reminderGuildIds),
     };
 
-    return {
+    const settings = {
         ...defaults,
         ...(guildData?.settings || {}),
     };
+
+    settings.dailyReminderHour = getIntegerSetting(settings.dailyReminderHour, defaults.dailyReminderHour, 0, 23);
+    settings.dailyReminderMinute = getIntegerSetting(settings.dailyReminderMinute, defaults.dailyReminderMinute, 0, 59);
+    settings.enableDailyReminders = getBooleanSetting(settings.enableDailyReminders, defaults.enableDailyReminders);
+    settings.reminderGuildIds = normalizeArray(settings.reminderGuildIds);
+    settings.timezone = settings.timezone || DEFAULT_TIMEZONE;
+    settings.dailyPuzzleRoleName = settings.dailyPuzzleRoleName || DEFAULT_DAILY_ROLE_NAME;
+    settings.dailyPuzzleRoleId = settings.dailyPuzzleRoleId || '';
+
+    return settings;
 }
 
 function shouldSendReminderNow(now, settings) {
@@ -509,7 +540,7 @@ async function fetchDailyLeetcodeChallenge() {
             title: question.title,
             titleSlug: question.titleSlug,
             difficulty: question.difficulty || 'Unknown',
-            url: daily.link ? `https://leetcode.com${daily.link}` : `https://leetcode.com/problems/${question.titleSlug}/`,
+            url: daily.link ? new URL(daily.link, 'https://leetcode.com').toString() : `https://leetcode.com/problems/${question.titleSlug}/`,
         };
     } catch (error) {
         console.error('Unable to fetch the daily Leetcode challenge. Sending fallback problemset link.', error.message);
@@ -562,13 +593,24 @@ async function resolveReminderChannel(botClient, guild, settings, options = {}) 
     return channel;
 }
 
-async function findDailyRole(guild, roleName) {
-    if (!guild || !roleName) return null;
+async function findDailyRole(guild, settingsOrRoleName) {
+    if (!guild || !settingsOrRoleName) return null;
+
+    const roleId = typeof settingsOrRoleName === 'object' ? settingsOrRoleName.dailyPuzzleRoleId : '';
+    const roleName = typeof settingsOrRoleName === 'object' ? settingsOrRoleName.dailyPuzzleRoleName : settingsOrRoleName;
 
     try {
         await guild.roles.fetch();
     } catch (error) {
         console.error('Could not refresh guild roles.', error.message);
+    }
+
+    if (roleId) {
+        let roleById = guild.roles.cache.get(roleId);
+        if (!roleById) {
+            roleById = await guild.roles.fetch(roleId).catch(() => null);
+        }
+        if (roleById) return roleById;
     }
 
     return guild.roles.cache.find(role => role.name === roleName) || null;
@@ -577,7 +619,11 @@ async function findDailyRole(guild, roleName) {
 async function sendDailyLeetcodeReminder(botClient, options = {}) {
     const data = loadBotData();
     const guildId = options.guildId || options.guild?.id;
-    const guild = options.guild || botClient.guilds.cache.get(guildId);
+    let guild = options.guild || botClient.guilds.cache.get(guildId);
+
+    if (!guild && guildId) {
+        guild = await botClient.guilds.fetch(guildId).catch(() => null);
+    }
 
     if (!guild) {
         throw new Error('Guild not found for daily reminder.');
@@ -599,7 +645,7 @@ async function sendDailyLeetcodeReminder(botClient, options = {}) {
     const channel = await resolveReminderChannel(botClient, guild, settings, options);
     const problem = options.problem || await fetchDailyLeetcodeChallenge();
     const embed = buildDailyLeetcodeEmbed(problem, botClient);
-    const role = options.isTest ? null : await findDailyRole(guild, settings.dailyPuzzleRoleName);
+    const role = options.isTest ? null : await findDailyRole(guild, settings);
 
     const content = options.isTest
         ? 'Test daily Leetcode reminder.'
@@ -658,17 +704,20 @@ async function sendDailyLeetcodeReminder(botClient, options = {}) {
 
 function getReminderGuildIds(botClient, data = loadBotData()) {
     const configGuildIds = normalizeArray(botClient.config.reminderGuildIds);
-    if (configGuildIds.length > 0) {
-        return configGuildIds;
+    const ids = new Set();
+
+    for (const id of configGuildIds) {
+        ids.add(id);
     }
 
-    const ids = new Set();
     for (const id of Object.keys(data.guilds || {})) {
         ids.add(id);
     }
 
-    for (const id of botClient.guilds.cache.keys()) {
-        ids.add(id);
+    if (ids.size === 0) {
+        for (const id of botClient.guilds.cache.keys()) {
+            ids.add(id);
+        }
     }
 
     return Array.from(ids);
@@ -948,20 +997,23 @@ function buildStatsEmbed(user, stats) {
 
 async function getMissedMembers(guild, guildData, timezone = DEFAULT_TIMEZONE) {
     const settings = getGuildSettings(guildData);
-    const role = await findDailyRole(guild, settings.dailyPuzzleRoleName);
+    const role = await findDailyRole(guild, settings);
 
     if (!role) {
         return {
             role,
             missedMembers: [],
+            warning: null,
             error: `Could not find the ${settings.dailyPuzzleRoleName} role.`,
         };
     }
 
+    let warning = null;
     try {
         await guild.members.fetch();
     } catch (error) {
         console.error('Could not fetch guild members. The member cache may be incomplete.', error.message);
+        warning = 'Could not fully refresh members. Enable the Server Members Intent if this list looks incomplete.';
     }
 
     const today = getTodayDateKey(timezone);
@@ -973,6 +1025,7 @@ async function getMissedMembers(guild, guildData, timezone = DEFAULT_TIMEZONE) {
     return {
         role,
         missedMembers: Array.from(missedMembers.values()),
+        warning,
         error: null,
     };
 }
@@ -1087,11 +1140,11 @@ async function handleSlashCommand(interaction) {
         const row = new ActionRowBuilder().addComponents(button);
         let clickCount = 0;
 
-        const message = await interaction.reply({
+        await interaction.reply({
             content: 'Click the button!',
             components: [row],
-            fetchReply: true,
         });
+        const message = await interaction.fetchReply();
 
         const collector = message.createMessageComponentCollector({
             filter: i => i.customId === 'clicker_button',
@@ -1114,7 +1167,7 @@ async function handleSlashCommand(interaction) {
         const guildData = ensureGuildData(data, guild.id);
         const settings = getGuildSettings(guildData);
 
-        let dailyPuzzleRole = guild.roles.cache.find(role => role.name === settings.dailyPuzzleRoleName);
+        let dailyPuzzleRole = await findDailyRole(guild, settings);
         if (!dailyPuzzleRole) {
             try {
                 dailyPuzzleRole = await guild.roles.create({
@@ -1135,6 +1188,10 @@ async function handleSlashCommand(interaction) {
 
         const roleMessage = await interaction.channel.send(`React to receive the "${settings.dailyPuzzleRoleName}" role!`);
         await roleMessage.react('🧩');
+
+        guildData.settings.dailyPuzzleRoleId = dailyPuzzleRole.id;
+        guildData.settings.dailyPuzzleRoleName = dailyPuzzleRole.name;
+        saveBotData(data);
 
         await interaction.reply({
             content: 'Reaction roles sent!',
@@ -1371,7 +1428,7 @@ async function handleSlashCommand(interaction) {
             .setColor(0xffa115)
             .setTitle(title)
             .setDescription(description)
-            .setFooter({ text: footer })
+            .setFooter({ text: result.warning ? `${footer} ${result.warning}` : footer })
             .setTimestamp();
 
         await interaction.reply({ embeds: [embed] });
@@ -1391,7 +1448,7 @@ async function handleSlashCommand(interaction) {
             return;
         }
 
-        let member = selectedUser ? interaction.guild.members.cache.get(selectedUser.id) : null;
+        let member = selectedUser ? await interaction.guild.members.fetch(selectedUser.id).catch(() => null) : null;
         if (!member && !selectedUser && missedResult.missedMembers.length > 0) {
             member = missedResult.missedMembers[Math.floor(Math.random() * missedResult.missedMembers.length)];
         }
@@ -1541,6 +1598,11 @@ async function handleSlashCommand(interaction) {
 
         if (commandName === 'setdailychannel') {
             const channel = options.getChannel('channel');
+            if (!channel || channel.guildId !== interaction.guild.id || !channel.isTextBased()) {
+                await interaction.reply({ content: 'Please choose a text channel from this server.', ephemeral: true });
+                return;
+            }
+
             guildData.settings.reminderChannelId = channel.id;
             saveBotData(data);
             await interaction.reply({ content: `Daily reminder channel set to <#${channel.id}>.`, ephemeral: true });
@@ -1559,6 +1621,7 @@ async function handleSlashCommand(interaction) {
 
         if (commandName === 'setdailyrole') {
             const role = options.getRole('role');
+            guildData.settings.dailyPuzzleRoleId = role.id;
             guildData.settings.dailyPuzzleRoleName = role.name;
             saveBotData(data);
             await interaction.reply({ content: `Daily Puzzle role set to ${role.name}.`, ephemeral: true });
@@ -1597,7 +1660,11 @@ client.on('messageCreate', message => {
 
 client.on('interactionCreate', async interaction => {
     try {
-        if (interaction.isChatInputCommand()) {
+        const isChatInputCommand = typeof interaction.isChatInputCommand === 'function'
+            ? interaction.isChatInputCommand()
+            : typeof interaction.isCommand === 'function' && interaction.isCommand();
+
+        if (isChatInputCommand) {
             await handleSlashCommand(interaction);
             return;
         }
@@ -1621,14 +1688,16 @@ client.on('interactionCreate', async interaction => {
 
 client.on('messageReactionAdd', async (reaction, user) => {
     try {
-        if (reaction.message.partial) await reaction.message.fetch();
         if (reaction.partial) await reaction.fetch();
-        if (user.bot) return;
+        if (reaction.message.partial) await reaction.message.fetch();
+
+        const reactingUser = user.partial ? await user.fetch().catch(() => null) : user;
+        if (!reactingUser || reactingUser.bot) return;
 
         const guild = reaction.message.guild;
         if (!guild) return;
 
-        const member = await guild.members.fetch(user.id).catch(() => null);
+        const member = await guild.members.fetch(reactingUser.id).catch(() => null);
         if (!member) return;
 
         const data = loadBotData();
@@ -1636,10 +1705,10 @@ client.on('messageReactionAdd', async (reaction, user) => {
         const settings = getGuildSettings(guildData);
 
         if (reaction.emoji.name === '🧩') {
-            const role = guild.roles.cache.find(r => r.name === settings.dailyPuzzleRoleName);
+            const role = await findDailyRole(guild, settings);
             if (role) {
                 await member.roles.add(role);
-                console.log(`Assigned ${role.name} to ${user.tag}`);
+                console.log(`Assigned ${role.name} to ${reactingUser.tag}`);
             }
             return;
         }
@@ -1648,14 +1717,20 @@ client.on('messageReactionAdd', async (reaction, user) => {
             const match = findDailyMessageByMessageId(guildData, reaction.message.id, reaction.message.channelId);
 
             if (match) {
-                const result = await markUserDone(guild.id, user, match.dateKey, match.dailyMessage.problem);
+                const result = await markUserDone(guild.id, reactingUser, match.dateKey, match.dailyMessage.problem);
                 if (!result.alreadyCompleted) {
-                    await reaction.message.channel.send(`Daily puzzle confirmed <@${user.id}> ✅`);
+                    await reaction.message.channel.send({
+                        content: `Daily puzzle confirmed <@${reactingUser.id}> ✅`,
+                        allowedMentions: { users: [reactingUser.id] },
+                    });
                 }
                 return;
             }
 
-            await reaction.message.channel.send(`Daily puzzle confirmed <@${user.id}>`);
+            await reaction.message.channel.send({
+                content: `Daily puzzle confirmed <@${reactingUser.id}>`,
+                allowedMentions: { users: [reactingUser.id] },
+            });
         }
     } catch (error) {
         console.error('Reaction add error:', error.message);
@@ -1664,14 +1739,16 @@ client.on('messageReactionAdd', async (reaction, user) => {
 
 client.on('messageReactionRemove', async (reaction, user) => {
     try {
-        if (reaction.message.partial) await reaction.message.fetch();
         if (reaction.partial) await reaction.fetch();
-        if (user.bot) return;
+        if (reaction.message.partial) await reaction.message.fetch();
+
+        const reactingUser = user.partial ? await user.fetch().catch(() => null) : user;
+        if (!reactingUser || reactingUser.bot) return;
 
         const guild = reaction.message.guild;
         if (!guild) return;
 
-        const member = await guild.members.fetch(user.id).catch(() => null);
+        const member = await guild.members.fetch(reactingUser.id).catch(() => null);
         if (!member) return;
 
         const data = loadBotData();
@@ -1679,10 +1756,10 @@ client.on('messageReactionRemove', async (reaction, user) => {
         const settings = getGuildSettings(guildData);
 
         if (reaction.emoji.name === '🧩') {
-            const role = guild.roles.cache.find(r => r.name === settings.dailyPuzzleRoleName);
+            const role = await findDailyRole(guild, settings);
             if (role) {
                 await member.roles.remove(role);
-                console.log(`Removed ${role.name} from ${user.tag}`);
+                console.log(`Removed ${role.name} from ${reactingUser.tag}`);
             }
         }
 
