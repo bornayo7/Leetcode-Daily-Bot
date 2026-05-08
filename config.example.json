@@ -1,0 +1,15 @@
+{
+  "TOKEN": "YOUR_DISCORD_BOT_TOKEN",
+  "reminderChannelId": "YOUR_DAILY_REMINDER_CHANNEL_ID",
+  "dailyReminderHour": 9,
+  "dailyReminderMinute": 0,
+  "timezone": "America/Chicago",
+  "dailyPuzzleRoleName": "Daily Puzzle",
+  "reminderGuildIds": [
+    "YOUR_DISCORD_SERVER_ID"
+  ],
+  "commandGuildIds": [
+    "YOUR_DISCORD_SERVER_ID"
+  ],
+  "enableDailyReminders": false
+}
